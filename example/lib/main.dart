@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_workout_bridge/flutter_workout_bridge.dart';
@@ -33,14 +35,67 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
   bool _permissionsGranted = false;
   bool _isLoading = false;
   String _statusMessage = 'Ready to start';
-  List<Map<String, dynamic>> _completedWorkouts = [];
+  List<WorkoutData> _completedWorkouts = [];
 
   @override
   void initState() {
     super.initState();
+    _checkPermissions();
   }
 
-  /// Request HealthKit permissions
+  Future<void> _checkPermissions() async {
+    setState(() {
+      _isLoading = true;
+      _statusMessage = 'Checking permissions...';
+    });
+
+    try {
+      final workouts = await FlutterWorkoutBridge.checkPermissions();
+      print('PERMISSIONS $workouts');
+
+      // ( workouts['readDetails']['HKWorkoutTypeIdentifier']=='denied'|| workouts['writeDetails']['HKWorkoutTypeIdentifier']=='denied')||( workouts['readDetails']['HKWorkoutTypeIdentifier']=='notDetermined'|| workouts['writeDetails']['HKWorkoutTypeIdentifier']=='notDetermined')
+      // Check specific permission keys like your controller does
+      final readWorkoutPermission = workouts['readDetails']?['HKWorkoutTypeIdentifier'];
+      final writeWorkoutPermission = workouts['writeDetails']?['HKWorkoutTypeIdentifier'];
+
+      // Use same logic as your controller
+      if ((readWorkoutPermission == 'denied' || writeWorkoutPermission == 'denied') ||
+          (readWorkoutPermission == 'notDetermined' || writeWorkoutPermission == 'notDetermined')) {
+
+        setState(() {
+          _permissionsGranted = false;
+          log('PERMISSION ${_permissionsGranted}');
+          _statusMessage = 'Permissions needed - some are denied or not determined';
+        });
+
+        if (readWorkoutPermission == 'denied' || writeWorkoutPermission == 'denied') {
+          _showPermissionDialog();
+        }
+      } else {
+        setState(() {
+          _permissionsGranted = true;
+          log('PERMISSION GRANTED ${_permissionsGranted}');
+          _statusMessage = 'Permissions already granted';
+        });
+
+        // Load workouts if permissions are good
+        await _loadCompletedWorkouts();
+      }
+
+    } catch (e) {
+      print('ERROR while checking permissions: $e');
+      setState(() {
+        _permissionsGranted = false;
+        _statusMessage = 'Permissions needed - Tap "Request Permissions"';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// Request permissions using controller approach
   Future<void> _requestPermissions() async {
     setState(() {
       _isLoading = true;
@@ -48,35 +103,72 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
     });
 
     try {
+      // Request HealthKit permissions through the bridge
       final granted = await FlutterWorkoutBridge.requestPermissions();
 
-      setState(() {
-        _permissionsGranted = granted;
-        _statusMessage = granted
-            ? 'Permissions granted successfully!'
-            : 'Permissions denied. Please enable in Settings > Privacy & Security > Health';
-      });
-
       if (granted) {
-        await _loadCompletedWorkouts();
+        setState(() {
+          _statusMessage = 'Permissions granted successfully!';
+        });
+
+
       } else {
+        setState(() {
+          _permissionsGranted = false;
+          _statusMessage = 'Permissions denied. Some features may not work.';
+        });
         _showPermissionDialog();
       }
+
     } on PlatformException catch (e) {
       setState(() {
         _statusMessage = 'Permission error: ${e.message}';
       });
-      _showErrorDialog(
-          'Permission Error', e.message ?? 'Unknown error occurred');
+      print('Permission error: $e');
     } catch (e) {
       setState(() {
         _statusMessage = 'Unexpected error: $e';
       });
+      print('Unexpected error in requestPermissions: $e');
     } finally {
       setState(() {
         _isLoading = false;
       });
     }
+  }
+
+  /// Enhanced permission dialog matching controller style
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Permissions Required'),
+        content: const Text(
+            'Your Apple Watch requires permissions to work with this app. '
+                'Please accept all required permissions to continue with Apple Watch.\n\n'
+                'Go to  Settings > Apps > Health > Data Access & Devices > '
+                'WorkoutBridge Example > Turn On All'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              // Load completed workouts after permissions are granted
+              await _loadCompletedWorkouts();
+
+              // Recheck permissions to update UI properly
+              await _checkPermissions();
+              // _requestPermissions();
+            },
+            child: const Text('Request Permissions'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Load completed workouts from HealthKit
@@ -89,13 +181,11 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
     });
 
     try {
-      final workouts =
-          await FlutterWorkoutBridge.getCompletedWorkouts(daysBack: 30);
+      final workouts = await FlutterWorkoutBridge.getCompletedWorkouts(daysBack: 30);
 
       setState(() {
         _completedWorkouts = workouts;
-        _statusMessage =
-            'Loaded ${workouts.length} workout(s) from last 30 days';
+        _statusMessage = 'Loaded ${workouts.length} workout(s) from last 30 days';
       });
     } on PlatformException catch (e) {
       setState(() {
@@ -114,7 +204,8 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
 
   /// Create and send a sample workout to Apple Watch
   Future<void> _createSampleWorkout() async {
-    if (!_permissionsGranted) {
+    log('PERMISSION WHILE CREATING WORKOUT ${_permissionsGranted}');
+    if (_permissionsGranted==false) {
       _showPermissionDialog();
       return;
     }
@@ -153,8 +244,7 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
       setState(() {
         _statusMessage = 'Error creating workout: ${e.message}';
       });
-      _showErrorDialog(
-          'Workout Error', e.message ?? 'Failed to create workout');
+      _showErrorDialog('Workout Error', e.message ?? 'Failed to create workout');
     } catch (e) {
       setState(() {
         _statusMessage = 'Error creating workout: $e';
@@ -182,7 +272,7 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
       final workout = WorkoutTemplates.cyclingWorkout(
         name: "Morning Cycling Session",
         warmupDistance: 1000, // 1km warmup
-        mainDistance: 15000, // 15km main ride
+        mainDistance: 15000,  // 15km main ride
         cooldownDistance: 1000, // 1km cooldown
       );
 
@@ -210,34 +300,6 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
     }
   }
 
-  /// Show permission explanation dialog
-  void _showPermissionDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Permissions Required'),
-        content: const Text('This app requires HealthKit permissions to:\n\n'
-            '• Read your workout data\n'
-            '• Create custom workouts\n'
-            '• Send workouts to Apple Watch\n\n'
-            'Please enable all permissions when prompted, or go to:\n'
-            'Settings > Privacy & Security > Health > WorkoutBridge Example'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _requestPermissions();
-            },
-            child: const Text('Request Permissions'),
-          ),
-        ],
-      ),
-    );
-  }
 
   /// Show error dialog
   void _showErrorDialog(String title, String message) {
@@ -272,8 +334,8 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
             const SizedBox(height: 4),
             const Text(
               '1. Open Workout app on Apple Watch\n'
-              '2. Scroll to bottom to find your workout\n'
-              '3. Tap to start when ready',
+                  '2. Scroll to bottom to find your workout\n'
+                  '3. Tap to start when ready',
               style: TextStyle(fontSize: 12),
             ),
             const SizedBox(height: 8),
@@ -315,18 +377,13 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
                     Row(
                       children: [
                         Icon(
-                          _permissionsGranted
-                              ? Icons.check_circle
-                              : Icons.warning,
-                          color: _permissionsGranted
-                              ? Colors.green
-                              : Colors.orange,
+                          _permissionsGranted ? Icons.check_circle : Icons.warning,
+                          color: _permissionsGranted ? Colors.green : Colors.orange,
                         ),
                         const SizedBox(width: 8),
                         const Text(
                           'Status',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -354,8 +411,20 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
             ],
+
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _checkPermissions,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Check Permissions'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+
+            const SizedBox(height: 16),
 
             // Workout Actions
             if (_permissionsGranted) ...[
@@ -410,6 +479,7 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
+
               Expanded(
                 child: ListView.builder(
                   itemCount: _completedWorkouts.length,
@@ -418,31 +488,27 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
                     return Card(
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: _getWorkoutColor(
-                              workout['workoutActivityType'] ?? 0),
+                          backgroundColor: _getWorkoutColor(workout.workoutActivityType ?? 0),
                           child: Icon(
-                            _getWorkoutIcon(
-                                workout['workoutActivityType'] ?? 0),
+                            _getWorkoutIcon(workout.totalDistance?.toInt() ?? 0),
                             color: Colors.white,
                           ),
                         ),
-                        title: Text(workout['name'] ?? 'Unknown Workout'),
+                        title: Text(workout.name ?? 'Unknown Workout'),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '${((workout['duration'] ?? 0) / 60).toInt()} min • ${((workout['totalDistance'] ?? 0) / 1000).toStringAsFixed(1)} km',
+                              '${((workout.duration.inMinutes ?? 0) / 60).toInt()} min • ${((workout.totalDistance ?? 0) / 1000).toStringAsFixed(1)} km',
                             ),
                             Text(
-                              workout['startDate'] ?? '',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey),
+                              workout.startDate.toString() ?? '',
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
                             ),
                           ],
                         ),
-                        trailing: workout['totalEnergyBurned'] != null
-                            ? Text(
-                                '${(workout['totalEnergyBurned'] as double).toInt()} kcal')
+                        trailing: workout.totalEnergyBurned!= null
+                            ? Text('${(workout.totalEnergyBurned as double).toInt()} kcal')
                             : null,
                         onTap: () => _showWorkoutDetails(workout),
                       ),
@@ -468,54 +534,41 @@ class _WorkoutBridgeHomePageState extends State<WorkoutBridgeHomePage> {
   Color _getWorkoutColor(int activityType) {
     // Map HKWorkoutActivityType values to colors
     switch (activityType) {
-      case 37:
-        return Colors.red; // Running
-      case 13:
-        return Colors.green; // Cycling
-      case 52:
-        return Colors.blue; // Walking
-      case 46:
-        return Colors.teal; // Swimming
-      default:
-        return Colors.grey;
+      case 37: return Colors.red; // Running
+      case 13: return Colors.green; // Cycling
+      case 52: return Colors.blue; // Walking
+      case 46: return Colors.teal; // Swimming
+      default: return Colors.grey;
     }
   }
 
   IconData _getWorkoutIcon(int activityType) {
     switch (activityType) {
-      case 37:
-        return Icons.directions_run;
-      case 13:
-        return Icons.directions_bike;
-      case 52:
-        return Icons.directions_walk;
-      case 46:
-        return Icons.pool;
-      default:
-        return Icons.fitness_center;
+      case 37: return Icons.directions_run;
+      case 13: return Icons.directions_bike;
+      case 52: return Icons.directions_walk;
+      case 46: return Icons.pool;
+      default: return Icons.fitness_center;
     }
   }
 
-  void _showWorkoutDetails(Map<String, dynamic> workout) {
+  void _showWorkoutDetails(WorkoutData workout) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(workout['name'] ?? 'Workout Details'),
+        title: Text(workout.name ?? 'Workout Details'),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildDetailRow('Duration',
-                  '${((workout['duration'] ?? 0) / 60).toInt()} minutes'),
-              if (workout['totalDistance'] != null)
-                _buildDetailRow('Distance',
-                    '${((workout['totalDistance'] as double) / 1000).toStringAsFixed(2)} km'),
-              if (workout['totalEnergyBurned'] != null)
-                _buildDetailRow('Calories',
-                    '${(workout['totalEnergyBurned'] as double).toInt()} kcal'),
-              _buildDetailRow('Source', workout['sourceName'] ?? 'Unknown'),
-              _buildDetailRow('Device', workout['device'] ?? 'Unknown'),
+              _buildDetailRow('Duration', '${((workout.duration.inMinutes ?? 0)).toInt()} minutes'),
+              if (workout.totalDistance!= null)
+                _buildDetailRow('Distance', '${((workout.totalDistance as double) / 1000).toStringAsFixed(2)} km'),
+              if (workout.totalEnergyBurned != null)
+                _buildDetailRow('Calories', '${(workout.totalEnergyBurned as double).toInt()} kcal'),
+              _buildDetailRow('Source', workout.sourceName ?? 'Unknown'),
+              _buildDetailRow('Device', workout.device ?? 'Unknown'),
             ],
           ),
         ),
