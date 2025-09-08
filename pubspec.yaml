@@ -30,8 +30,6 @@ flutter:
 topics:
   - workout
   - health
-  - fitness
   - apple-watch
   - healthkit
   - workoutkit
-  - ios
