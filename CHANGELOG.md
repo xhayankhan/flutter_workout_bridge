@@ -1,6 +1,13 @@
 
 # Changelog
 
+## [1.0.1] - 2024-12-XX
+
+### Changed
+- Updated repository URLs to point to correct GitHub account (xhayankhan)
+- Updated author information in podspec
+- Fixed topics to comply with pub.dev requirements
+
 ## [1.0.0] - 2025-09-08
 
 ### Added
