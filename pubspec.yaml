@@ -1,6 +1,6 @@
 name: flutter_workout_bridge
 description: A comprehensive Flutter plugin for integrating with Apple WorkoutKit and HealthKit to create custom workouts, schedule them to Apple Watch, and retrieve detailed workout data.
-version: 1.0.0
+version: 1.0.1
 homepage: https://github.com/xhayankhan/flutter_workout_bridge
 repository: https://github.com/xhayankhan/flutter_workout_bridge
 issue_tracker: https://github.com/xhayankhan/flutter_workout_bridge/issues

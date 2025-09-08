@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
 s.name             = 'flutter_workout_bridge'
-s.version          = '1.0.0'
+s.version = '1.0.1'
 s.summary          = 'A Flutter plugin for integrating with Apple WorkoutKit and HealthKit.'
 s.description      = <<-DESC
         A comprehensive Flutter plugin that provides a bridge to Apple's WorkoutKit and HealthKit frameworks,
