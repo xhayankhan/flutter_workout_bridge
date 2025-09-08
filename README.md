@@ -171,5 +171,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 [![GitHub](https://img.shields.io/badge/GitHub-xhayankhan-black?style=flat&logo=github)](https://github.com/xhayankhan)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-shayan--flutter--dev-blue?style=flat&logo=linkedin)](https://www.linkedin.com/in/shayan-flutter-dev/)
 
-  <p><em>Building bridges between Flutter and native iOS capabilities</em></p>
+
 </div>
