@@ -1,7 +1,16 @@
 
 # Changelog
 
-## [1.0.1] - 2024-12-XX
+## [1.0.2] - 2025-09-08
+
+### Changed
+- Updated repository URLs to point to correct GitHub account (xhayankhan)
+- Updated author information and contact details in README and podspec
+- Added professional author section with GitHub profile image and social links
+- Fixed topics in pubspec.yaml to comply with pub.dev requirements (reduced to 5 topics)
+- Updated LinkedIn profile link to correct URL
+
+## [1.0.1] - 2025-09-08
 
 ### Changed
 - Updated repository URLs to point to correct GitHub account (xhayankhan)
